@@ -377,7 +377,17 @@ if __name__ == "__main__":
     parser.add_argument('--num-workers', type=int, default=4, help='Number of data loading workers')
     parser.add_argument('--no-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
+    parser.add_argument('--scale-factor', type=int, default=DATA['scale_factor'], choices=[2, 4], 
+                      help='Super-resolution scaling factor (2x or 4x)')
     
     args = parser.parse_args()
+    
+    # Dynamicky nastavit scale_factor, pokud se liší od výchozí hodnoty
+    if args.scale_factor != DATA['scale_factor']:
+        print(f"Changing scale factor from {DATA['scale_factor']}x to {args.scale_factor}x")
+        DATA['scale_factor'] = args.scale_factor
+        # Upravit také lr_size podle scale_factoru
+        DATA['lr_size'] = DATA['hr_size'] // args.scale_factor
+        print(f"Adjusted lr_size to {DATA['lr_size']}")
     
     train(args) 

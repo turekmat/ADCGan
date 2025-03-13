@@ -270,8 +270,18 @@ if __name__ == "__main__":
     parser.add_argument('--ground-truth', type=str, default=None, help='Ground truth high-resolution image for evaluation')
     parser.add_argument('--visualize', action='store_true', help='Create visualization of results')
     parser.add_argument('--no-cuda', action='store_true', help='Disable CUDA')
+    parser.add_argument('--scale-factor', type=int, default=DATA['scale_factor'], choices=[2, 4], 
+                      help='Super-resolution scaling factor (2x or 4x)')
     
     args = parser.parse_args()
+    
+    # Dynamicky nastavit scale_factor, pokud se liší od výchozí hodnoty
+    if args.scale_factor != DATA['scale_factor']:
+        print(f"Changing scale factor from {DATA['scale_factor']}x to {args.scale_factor}x")
+        DATA['scale_factor'] = args.scale_factor
+        # Upravit také lr_size podle scale_factoru
+        DATA['lr_size'] = DATA['hr_size'] // args.scale_factor
+        print(f"Adjusted lr_size to {DATA['lr_size']}")
     
     # Check if input file exists
     if not os.path.isfile(args.input):

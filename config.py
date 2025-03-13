@@ -5,8 +5,8 @@ Configuration settings for the Super-Resolution GAN for medical imaging.
 # Data settings
 DATA = {
     'hr_size': 256,  # High-resolution image size
-    'lr_size': 128,  # Low-resolution image size (downsampled by 2x)
-    'scale_factor': 2,  # Super-resolution scaling factor
+    'lr_size': 64,  # Low-resolution image size (downsampled by 4x)
+    'scale_factor': 4,  # Super-resolution scaling factor
     'slice_threshold': 0.01,  # Threshold to skip black slices (if max value < threshold)
     'channels': 1,  # Number of channels in the input images (1 for grayscale)
 }
