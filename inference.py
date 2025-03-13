@@ -156,10 +156,15 @@ def run_inference(args):
         lr_tensor = torch.from_numpy(lr_slice).float().unsqueeze(0).unsqueeze(0).to(device)
         
         # Normalize to [0, 1] if needed
+        normalized = False
+        lr_min = 0
+        lr_max = 1
+
         if lr_tensor.min() < 0 or lr_tensor.max() > 1:
             lr_min = lr_tensor.min()
             lr_max = lr_tensor.max()
             lr_tensor = (lr_tensor - lr_min) / (lr_max - lr_min)
+            normalized = True
         
         # Resize if needed
         if lr_tensor.shape[2] != DATA['lr_size'] or lr_tensor.shape[3] != DATA['lr_size']:
@@ -184,7 +189,7 @@ def run_inference(args):
             )
         
         # Convert back to original range if normalized
-        if lr_tensor.min() < 0 or lr_tensor.max() > 1:
+        if normalized:
             sr_tensor = sr_tensor * (lr_max - lr_min) + lr_min
         
         # Convert to numpy and store in output volume
