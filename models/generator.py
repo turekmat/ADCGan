@@ -59,8 +59,17 @@ class Generator(nn.Module):
         
         # Parameters
         self.scale_factor = DATA['scale_factor']
-        n_residual_blocks = MODEL['generator']['n_residual_blocks']
-        base_filters = MODEL['generator']['base_filters']
+        
+        # Dynamicky upravit počet bloků a filtrů pro scale_factor=4
+        if self.scale_factor == 4:
+            # Pro 4x upscaling použijeme větší model
+            n_residual_blocks = MODEL['generator']['n_residual_blocks'] + 8  # Zvýšit počet bloků o 8
+            base_filters = MODEL['generator']['base_filters'] + 32  # Zvýšit počet filtrů o 32
+            print(f"Using enhanced generator architecture for 4x upscaling: {n_residual_blocks} residual blocks, {base_filters} base filters")
+        else:
+            # Pro 2x upscaling použijeme standardní model
+            n_residual_blocks = MODEL['generator']['n_residual_blocks']
+            base_filters = MODEL['generator']['base_filters']
         
         # First convolutional layer
         self.conv1 = nn.Conv2d(DATA['channels'], base_filters, kernel_size=9, stride=1, padding=4)
@@ -78,7 +87,7 @@ class Generator(nn.Module):
         
         # Upsampling blocks
         upsample_blocks = []
-        for _ in range(int(self.scale_factor / 2)):  # For 2x upsampling, we need 1 upsampling block
+        for _ in range(int(self.scale_factor / 2)):  # For 2x upscaling, we need 1 upsampling block
             upsample_blocks.append(UpsampleBlock(base_filters))
         self.upsample_blocks = nn.Sequential(*upsample_blocks)
         

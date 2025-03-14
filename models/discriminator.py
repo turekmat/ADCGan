@@ -54,15 +54,22 @@ class Discriminator(nn.Module):
             DiscriminatorBlock(base_filters * 8, base_filters * 8, stride=2),
         )
         
-        # Calculate input size for the first FC layer
-        # For a 2x scale factor, if HR is 256x256, then the feature maps will be 16x16
-        feature_size = DATA['hr_size'] // 16
+        # Dynamicky zvýšit kapacitu diskriminátoru pro 4x
+        if DATA['scale_factor'] == 4:
+            print(f"Using enhanced discriminator architecture for 4x upscaling")
+            # Přidat další bloky pro zpracování většího rozlišení při 4x
+            self.blocks.add_module('extra1', DiscriminatorBlock(base_filters * 8, base_filters * 16, stride=1))
+            self.blocks.add_module('extra2', DiscriminatorBlock(base_filters * 16, base_filters * 16, stride=2))
+            final_filters = base_filters * 16
+        else:
+            final_filters = base_filters * 8
         
-        # Fully connected layers
+        # Adaptive average pooling zajistí, že výstup bude vždy 1x1 bez ohledu na vstupní velikost
+        # Toto dělá výpočet feature_size nepotřebným a model je adaptivní pro různé scale_factory
         self.classifier = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
-            nn.Linear(base_filters * 8, 1024),
+            nn.Linear(final_filters, 1024),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(1024, 1),
             nn.Sigmoid()

@@ -55,6 +55,10 @@ def train(args):
     # Create necessary directories
     create_dirs()
     
+    # Vypsat informace o konfiguraci tréninku
+    print(f"Training SRGAN with {DATA['scale_factor']}x upscaling")
+    print(f"HR size: {DATA['hr_size']}x{DATA['hr_size']}, LR size: {DATA['lr_size']}x{DATA['lr_size']}")
+    
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() and not args.no_cuda else 'cpu')
     print(f"Using device: {device}")

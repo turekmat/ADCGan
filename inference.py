@@ -30,6 +30,8 @@ def load_model(checkpoint_path, device):
     Returns:
         nn.Module: Loaded generator model
     """
+    # Vytvoříme generátor podle aktuálně nastaveného scale_factoru v DATA
+    # To zajistí, že model bude mít správnou architekturu pro požadovaný scale_factor
     generator = Generator().to(device)
     
     # Load checkpoint
@@ -111,6 +113,10 @@ def run_inference(args):
     Args:
         args: Command-line arguments
     """
+    # Vypsat informace o konfiguraci inference
+    print(f"Running inference with {DATA['scale_factor']}x upscaling")
+    print(f"HR size: {DATA['hr_size']}x{DATA['hr_size']}, LR size: {DATA['lr_size']}x{DATA['lr_size']}")
+    
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() and not args.no_cuda else 'cpu')
     print(f"Using device: {device}")
