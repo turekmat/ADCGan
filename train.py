@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from models.srgan import SRGAN
 from data_loader import get_dataloader, MedicalImageDataset
-from utils import create_dirs, visualize_results, AverageMeter, calculate_psnr, calculate_ssim
+from utils import create_dirs, visualize_results, AverageMeter, calculate_psnr, calculate_ssim, calculate_mae
 from config import TRAINING, DIRS, DATA, VISUALIZATION
 
 def train_val_split(file_list, val_split=0.1, seed=42):
@@ -182,6 +182,7 @@ def train(args):
         d_losses = AverageMeter()
         psnr_metrics = AverageMeter()
         ssim_metrics = AverageMeter()
+        mae_metrics = AverageMeter()
         batch_time = AverageMeter()
         data_time = AverageMeter()
         
@@ -239,8 +240,13 @@ def train(args):
             
             # Calculate image quality metrics
             with torch.no_grad():
-                psnr = calculate_psnr(sr_imgs.detach(), hr_imgs.detach())
-                ssim = calculate_ssim(sr_imgs.detach(), hr_imgs.detach())
+                # Create mask from HR images (non-zero regions)
+                mask = hr_imgs.detach() > 0
+                
+                # Calculate metrics using the mask
+                psnr = calculate_psnr(sr_imgs.detach(), hr_imgs.detach(), mask)
+                ssim = calculate_ssim(sr_imgs.detach(), hr_imgs.detach(), mask)
+                mae = calculate_mae(sr_imgs.detach(), hr_imgs.detach(), mask)
             
             # Update statistics
             g_losses.update(g_loss.item(), lr_imgs.size(0))
@@ -250,6 +256,7 @@ def train(args):
             d_losses.update(d_loss.item(), lr_imgs.size(0))
             psnr_metrics.update(psnr, lr_imgs.size(0))
             ssim_metrics.update(ssim, lr_imgs.size(0))
+            mae_metrics.update(mae, lr_imgs.size(0))
             
             # Measure elapsed time
             batch_time.update(time.time() - end)
@@ -262,7 +269,9 @@ def train(args):
                 f"Time: {batch_time.avg:.4f} "
                 f"G Loss: {g_losses.avg:.4f} "
                 f"D Loss: {d_losses.avg:.4f} "
-                f"PSNR: {psnr_metrics.avg:.2f}"
+                f"PSNR: {psnr_metrics.avg:.2f} "
+                f"SSIM: {ssim_metrics.avg:.4f} "
+                f"MAE: {mae_metrics.avg:.4f}"
             )
             
             # Log to tensorboard
@@ -275,6 +284,7 @@ def train(args):
                 writer.add_scalar('Train/D_Loss', d_losses.avg, current_step)
                 writer.add_scalar('Train/PSNR', psnr_metrics.avg, current_step)
                 writer.add_scalar('Train/SSIM', ssim_metrics.avg, current_step)
+                writer.add_scalar('Train/MAE', mae_metrics.avg, current_step)
         
         # Validate after each epoch if validation set is provided
         if val_dataloader is not None and (epoch + 1) % TRAINING['validation_frequency'] == 0:
@@ -331,6 +341,7 @@ def validate(val_dataloader, model, epoch, writer, device):
     # Initialize average meters
     psnr_metrics = AverageMeter()
     ssim_metrics = AverageMeter()
+    mae_metrics = AverageMeter()
     
     with torch.no_grad():
         pbar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
@@ -342,27 +353,36 @@ def validate(val_dataloader, model, epoch, writer, device):
             # Generate super-resolution images
             sr_imgs = model.generator(lr_imgs)
             
-            # Calculate image quality metrics
-            psnr = calculate_psnr(sr_imgs, hr_imgs)
-            ssim = calculate_ssim(sr_imgs, hr_imgs)
+            # Create mask from HR images (non-zero regions)
+            # HR mask is where pixel values are greater than 0
+            mask = hr_imgs > 0
+            
+            # Calculate image quality metrics with mask
+            psnr = calculate_psnr(sr_imgs, hr_imgs, mask)
+            ssim = calculate_ssim(sr_imgs, hr_imgs, mask)
+            mae = calculate_mae(sr_imgs, hr_imgs, mask)
             
             # Update statistics
             psnr_metrics.update(psnr, lr_imgs.size(0))
             ssim_metrics.update(ssim, lr_imgs.size(0))
+            mae_metrics.update(mae, lr_imgs.size(0))
             
             pbar.set_description(
                 f"Validation: "
                 f"PSNR: {psnr_metrics.avg:.2f} "
-                f"SSIM: {ssim_metrics.avg:.4f}"
+                f"SSIM: {ssim_metrics.avg:.4f} "
+                f"MAE: {mae_metrics.avg:.4f}"
             )
     
     print(f"Validation Results - Epoch: {epoch + 1} "
           f"PSNR: {psnr_metrics.avg:.2f} "
-          f"SSIM: {ssim_metrics.avg:.4f}")
+          f"SSIM: {ssim_metrics.avg:.4f} "
+          f"MAE: {mae_metrics.avg:.4f}")
     
     # Log to tensorboard
     writer.add_scalar('Val/PSNR', psnr_metrics.avg, epoch + 1)
     writer.add_scalar('Val/SSIM', ssim_metrics.avg, epoch + 1)
+    writer.add_scalar('Val/MAE', mae_metrics.avg, epoch + 1)
     
     # Restore model to training mode
     model.generator.train()

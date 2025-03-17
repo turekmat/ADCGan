@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from models.generator import Generator
-from utils import calculate_psnr, calculate_ssim
+from utils import calculate_psnr, calculate_ssim, calculate_mae
 from config import DATA
 
 def load_model(checkpoint_path, device):
@@ -141,6 +141,7 @@ def run_inference(args):
     start_time = time.time()
     psnr_values = []
     ssim_values = []
+    mae_values = []
     
     for slice_idx in tqdm(range(d)):
         # Extract slice
@@ -209,10 +210,16 @@ def run_inference(args):
             
             # Only calculate metrics if ground truth slice is not empty
             if gt_slice.max() > DATA['slice_threshold']:
-                psnr = calculate_psnr(sr_slice, gt_slice)
-                ssim = calculate_ssim(sr_slice, gt_slice)
+                # Create mask from non-zero regions in ground truth
+                mask = gt_slice > 0
+                
+                # Calculate metrics using the mask
+                psnr = calculate_psnr(sr_slice, gt_slice, mask)
+                ssim = calculate_ssim(sr_slice, gt_slice, mask)
+                mae = calculate_mae(sr_slice, gt_slice, mask)
                 psnr_values.append(psnr)
                 ssim_values.append(ssim)
+                mae_values.append(mae)  # Store MAE values
     
     # Report processing time
     elapsed_time = time.time() - start_time
@@ -222,8 +229,10 @@ def run_inference(args):
     if args.ground_truth and psnr_values:
         avg_psnr = np.mean(psnr_values)
         avg_ssim = np.mean(ssim_values)
+        avg_mae = np.mean(mae_values)  # Calculate average MAE
         print(f"Average PSNR: {avg_psnr:.2f} dB")
         print(f"Average SSIM: {avg_ssim:.4f}")
+        print(f"Average MAE: {avg_mae:.4f}")  # Print average MAE
     
     # Save output volume
     print(f"Saving output volume to {args.output}")
