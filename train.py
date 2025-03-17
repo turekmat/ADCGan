@@ -347,6 +347,9 @@ def validate(val_dataloader, model, epoch, writer, device):
     ssim_metrics = AverageMeter()
     mae_metrics = AverageMeter()
     
+    # Flag to track if we've saved a visualization for this epoch
+    vis_saved = False
+    
     with torch.no_grad():
         pbar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
         for i, (lr_imgs, hr_imgs) in pbar:
@@ -373,6 +376,51 @@ def validate(val_dataloader, model, epoch, writer, device):
             psnr_metrics.update(psnr, lr_imgs.size(0))
             ssim_metrics.update(ssim, lr_imgs.size(0))
             mae_metrics.update(mae, lr_imgs.size(0))
+            
+            # Save visualizations of middle slice for the first batch if not already saved
+            if i == 0 and not vis_saved:
+                # Use the first sample from the batch
+                sample_idx = 0
+                
+                # Get a sample of LR, SR and HR images
+                sample_lr = lr_imgs[sample_idx:sample_idx+1].detach()
+                sample_sr = sr_imgs[sample_idx:sample_idx+1].detach()
+                sample_hr = hr_imgs[sample_idx:sample_idx+1].detach()
+                
+                # Create directory for validation visualizations if it doesn't exist
+                validation_viz_dir = os.path.join(DIRS['results'], 'validation_viz')
+                os.makedirs(validation_viz_dir, exist_ok=True)
+                
+                # Save the visualization of middle slice
+                save_path = os.path.join(validation_viz_dir, f'val_epoch_{epoch+1}.png')
+                
+                # Calculate metrics for this specific sample
+                sample_mask = mask[sample_idx:sample_idx+1] if mask.dim() > 2 else mask
+                sample_psnr = calculate_psnr(sample_sr, sample_hr, sample_mask)
+                sample_ssim = calculate_ssim(sample_sr, sample_hr, sample_mask)
+                sample_mae = calculate_mae(sample_sr, sample_hr, sample_mask)
+                
+                # Add custom title with metrics for this specific sample
+                title = f'Validation - Epoch {epoch+1}\nPSNR: {sample_psnr:.2f} dB, SSIM: {sample_ssim:.4f}, MAE: {sample_mae:.4f}'
+                
+                # Visualize results (uses middle slice by default)
+                visualize_results(sample_lr, sample_sr, sample_hr, epoch+1, 0, save_path, custom_title=title)
+                
+                # Also add the visualization to TensorBoard
+                if writer:
+                    # Reshape for TensorBoard (which expects [B, C, H, W])
+                    grid_lr = sample_lr.cpu()
+                    grid_sr = sample_sr.cpu()
+                    grid_hr = sample_hr.cpu()
+                    
+                    # Log images to TensorBoard
+                    writer.add_images('Val/LR_Images', grid_lr, epoch+1)
+                    writer.add_images('Val/SR_Generated', grid_sr, epoch+1)
+                    writer.add_images('Val/HR_GroundTruth', grid_hr, epoch+1)
+                
+                # Set flag to indicate we've saved a visualization
+                vis_saved = True
+                print(f"Saved validation visualization to {save_path}")
             
             pbar.set_description(
                 f"Validation: "
