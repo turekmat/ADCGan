@@ -241,7 +241,11 @@ def train(args):
             # Calculate image quality metrics
             with torch.no_grad():
                 # Create mask from HR images (non-zero regions)
-                mask = (hr_imgs.detach() > 0).cpu()  # Move mask to CPU
+                # Ensure mask has same dimensions as the images (removing channel dim)
+                if hr_imgs.dim() == 4:  # [B, C, H, W]
+                    mask = (hr_imgs.detach()[:, 0] > 0).cpu()  # Results in [B, H, W]
+                else:  # [C, H, W] or [H, W]
+                    mask = (hr_imgs.detach() > 0).cpu()
                 
                 # Calculate metrics using the mask
                 psnr = calculate_psnr(sr_imgs.detach(), hr_imgs.detach(), mask)
@@ -355,7 +359,10 @@ def validate(val_dataloader, model, epoch, writer, device):
             
             # Create mask from HR images (non-zero regions)
             # HR mask is where pixel values are greater than 0
-            mask = (hr_imgs > 0).cpu()  # Move mask to CPU
+            if hr_imgs.dim() == 4:  # [B, C, H, W]
+                mask = (hr_imgs[:, 0] > 0).cpu()  # Results in [B, H, W]
+            else:  # [C, H, W] or [H, W]
+                mask = (hr_imgs > 0).cpu()
             
             # Calculate image quality metrics with mask
             psnr = calculate_psnr(sr_imgs, hr_imgs, mask)

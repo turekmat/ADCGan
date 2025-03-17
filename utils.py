@@ -53,9 +53,9 @@ def calculate_psnr(img1, img2, mask=None):
     Calculate PSNR between two images, optionally only in masked regions.
     
     Args:
-        img1 (numpy.ndarray): First image
-        img2 (numpy.ndarray): Second image
-        mask (numpy.ndarray, optional): If provided, only calculate metrics in non-zero mask regions
+        img1 (numpy.ndarray or torch.Tensor): First image
+        img2 (numpy.ndarray or torch.Tensor): Second image
+        mask (numpy.ndarray or torch.Tensor, optional): If provided, only calculate metrics in non-zero mask regions
         
     Returns:
         float: PSNR value
@@ -65,6 +65,8 @@ def calculate_psnr(img1, img2, mask=None):
         img1 = img1.detach().cpu().numpy()
     if isinstance(img2, torch.Tensor):
         img2 = img2.detach().cpu().numpy()
+    if isinstance(mask, torch.Tensor):
+        mask = mask.detach().cpu().numpy()
     
     # Create mask from img2 (HR image) if not provided
     if mask is None:
@@ -85,16 +87,23 @@ def calculate_psnr(img1, img2, mask=None):
             # Extract single image
             single_img1 = img1[i, 0]  # Assuming single channel
             single_img2 = img2[i, 0]
-            single_mask = mask[i] if mask.ndim > 2 else mask
             
-            # Apply mask
-            masked_img1 = single_img1[single_mask]
-            masked_img2 = single_img2[single_mask]
+            # Get appropriate mask for this batch item
+            if mask.ndim == 4:  # Mask is [B, C, H, W]
+                single_mask = mask[i, 0]
+            elif mask.ndim == 3:  # Mask is [B, H, W]
+                single_mask = mask[i]
+            else:  # Mask is [H, W]
+                single_mask = mask
             
             # Skip if mask is empty
             if np.sum(single_mask) == 0:
                 continue
                 
+            # Apply mask - extract only the pixels where mask is True
+            masked_img1 = single_img1[single_mask]
+            masked_img2 = single_img2[single_mask]
+            
             # Calculate PSNR on masked areas
             mse = np.mean((masked_img1 - masked_img2) ** 2)
             if mse == 0:
@@ -104,16 +113,42 @@ def calculate_psnr(img1, img2, mask=None):
         
         return np.mean(psnr_values) if psnr_values else 0.0
     else:
-        # Apply mask
-        masked_img1 = img1[mask]
-        masked_img2 = img2[mask]
+        # For single images (non-batched)
+        
+        # Extract the right dimensions for single-channel images
+        if img1.ndim == 3:  # [C, H, W]
+            # Use the first channel for simplicity
+            img1_2d = img1[0]
+            img2_2d = img2[0]
+            
+            # Get 2D mask from the first channel if necessary
+            if mask.ndim == 3:
+                mask_2d = mask[0]
+            elif mask.ndim > 3:
+                mask_2d = mask[0, 0]
+            else:
+                mask_2d = mask
+        else:  # [H, W]
+            img1_2d = img1
+            img2_2d = img2
+            
+            # Ensure mask is 2D
+            if mask.ndim > 2:
+                mask_2d = mask[0] if mask.ndim == 3 else mask[0, 0]
+            else:
+                mask_2d = mask
         
         # Skip if mask is empty
-        if np.sum(mask) == 0:
+        if np.sum(mask_2d) == 0:
             return 0.0
-            
+        
+        # Apply mask to get the masked pixels
+        masked_img1 = img1_2d[mask_2d]
+        masked_img2 = img2_2d[mask_2d]
+        
         # Calculate PSNR on masked areas
         mse = np.mean((masked_img1 - masked_img2) ** 2)
+        
         if mse == 0:
             return 100  # To handle perfect reconstruction
         return 10 * np.log10(1.0 / mse)
@@ -123,9 +158,9 @@ def calculate_ssim(img1, img2, mask=None):
     Calculate Structural Similarity Index (SSIM) between two images, optionally only in masked regions.
     
     Args:
-        img1 (numpy.ndarray): First image
-        img2 (numpy.ndarray): Second image
-        mask (numpy.ndarray, optional): If provided, only calculate metrics in non-zero mask regions
+        img1 (numpy.ndarray or torch.Tensor): First image
+        img2 (numpy.ndarray or torch.Tensor): Second image
+        mask (numpy.ndarray or torch.Tensor, optional): If provided, only calculate metrics in non-zero mask regions
         
     Returns:
         float: SSIM value
@@ -135,6 +170,8 @@ def calculate_ssim(img1, img2, mask=None):
         img1 = img1.detach().cpu().numpy()
     if isinstance(img2, torch.Tensor):
         img2 = img2.detach().cpu().numpy()
+    if isinstance(mask, torch.Tensor):
+        mask = mask.detach().cpu().numpy()
     
     # Create mask from img2 (HR image) if not provided
     if mask is None:
@@ -152,10 +189,17 @@ def calculate_ssim(img1, img2, mask=None):
     if img1.ndim == 4:  # [B, C, H, W]
         ssim_values = []
         for i in range(img1.shape[0]):
-            # Extract single image
-            single_img1 = img1[i, 0]  # Assuming single channel
+            # Extract single image (first channel for simplicity)
+            single_img1 = img1[i, 0]
             single_img2 = img2[i, 0]
-            single_mask = mask[i] if mask.ndim > 2 else mask
+            
+            # Get appropriate mask for this batch item
+            if mask.ndim == 4:  # Mask is [B, C, H, W]
+                single_mask = mask[i, 0]
+            elif mask.ndim == 3:  # Mask is [B, H, W]
+                single_mask = mask[i]
+            else:  # Mask is [H, W]
+                single_mask = mask
             
             # Skip if mask is empty or too small
             if np.sum(single_mask) < 16:  # Minimum size needed for SSIM
@@ -180,16 +224,41 @@ def calculate_ssim(img1, img2, mask=None):
         
         return np.mean(ssim_values) if ssim_values else 0.0
     else:
+        # For single images (non-batched)
+        
+        # Extract the right dimensions for single-channel images
+        if img1.ndim == 3:  # [C, H, W]
+            # Use the first channel for simplicity
+            img1_2d = img1[0]
+            img2_2d = img2[0]
+            
+            # Get 2D mask from the first channel if necessary
+            if mask.ndim == 3:
+                mask_2d = mask[0]
+            elif mask.ndim > 3:
+                mask_2d = mask[0, 0]
+            else:
+                mask_2d = mask
+        else:  # [H, W]
+            img1_2d = img1
+            img2_2d = img2
+            
+            # Ensure mask is 2D
+            if mask.ndim > 2:
+                mask_2d = mask[0] if mask.ndim == 3 else mask[0, 0]
+            else:
+                mask_2d = mask
+        
         # Skip if mask is empty or too small
-        if np.sum(mask) < 16:  # Minimum size needed for SSIM
+        if np.sum(mask_2d) < 16:  # Minimum size needed for SSIM
             return 0.0
             
         # For SSIM, we need to use the original shape but apply the mask
         # Create masked versions where non-mask areas are set to 0
-        masked_img1 = img1.copy()
-        masked_img2 = img2.copy()
-        masked_img1[~mask] = 0
-        masked_img2[~mask] = 0
+        masked_img1 = img1_2d.copy()
+        masked_img2 = img2_2d.copy()
+        masked_img1[~mask_2d] = 0
+        masked_img2[~mask_2d] = 0
         
         try:
             # Try computing SSIM on masked images
@@ -207,7 +276,7 @@ def calculate_mae(img1, img2, mask=None):
     Args:
         img1 (numpy.ndarray or torch.Tensor): First image
         img2 (numpy.ndarray or torch.Tensor): Second image
-        mask (numpy.ndarray, optional): If provided, only calculate metrics in non-zero mask regions
+        mask (numpy.ndarray or torch.Tensor, optional): If provided, only calculate metrics in non-zero mask regions
         
     Returns:
         float: MAE value
@@ -217,6 +286,8 @@ def calculate_mae(img1, img2, mask=None):
         img1 = img1.detach().cpu().numpy()
     if isinstance(img2, torch.Tensor):
         img2 = img2.detach().cpu().numpy()
+    if isinstance(mask, torch.Tensor):
+        mask = mask.detach().cpu().numpy()
     
     # Create mask from img2 (HR image) if not provided
     if mask is None:
@@ -234,32 +305,60 @@ def calculate_mae(img1, img2, mask=None):
     if img1.ndim == 4:  # [B, C, H, W]
         mae_values = []
         for i in range(img1.shape[0]):
-            # Extract single image and mask
-            single_img1 = img1[i]
-            single_img2 = img2[i]
-            single_mask = mask[i] if mask.ndim > 2 else mask
+            # Extract single image (first channel for simplicity)
+            single_img1 = img1[i, 0]
+            single_img2 = img2[i, 0]
+            
+            # Get appropriate mask for this batch item
+            if mask.ndim == 4:  # Mask is [B, C, H, W]
+                single_mask = mask[i, 0]
+            elif mask.ndim == 3:  # Mask is [B, H, W]
+                single_mask = mask[i]
+            else:  # Mask is [H, W]
+                single_mask = mask
             
             # Skip if mask is empty
             if np.sum(single_mask) == 0:
                 continue
                 
-            # Expand mask to match channel dimension if needed
-            if single_mask.ndim == 2 and single_img1.ndim == 3:
-                single_mask = np.repeat(single_mask[np.newaxis, :, :], single_img1.shape[0], axis=0)
-            
             # Apply mask and calculate MAE
             masked_diff = np.abs(single_img1 - single_img2) * single_mask
             mae_values.append(np.sum(masked_diff) / np.sum(single_mask))
         
         return np.mean(mae_values) if mae_values else 0.0
     else:
-        # Skip if mask is empty
-        if np.sum(mask) == 0:
-            return 0.0
+        # For single images (non-batched)
+        
+        # Extract the right dimensions for single-channel images
+        if img1.ndim == 3:  # [C, H, W]
+            # Use the first channel for simplicity
+            img1_2d = img1[0]
+            img2_2d = img2[0]
             
+            # Get 2D mask from the first channel if necessary
+            if mask.ndim == 3:
+                mask_2d = mask[0]
+            elif mask.ndim > 3:
+                mask_2d = mask[0, 0]
+            else:
+                mask_2d = mask
+        else:  # [H, W]
+            img1_2d = img1
+            img2_2d = img2
+            
+            # Ensure mask is 2D
+            if mask.ndim > 2:
+                mask_2d = mask[0] if mask.ndim == 3 else mask[0, 0]
+            else:
+                mask_2d = mask
+        
+        # Skip if mask is empty
+        if np.sum(mask_2d) == 0:
+            return 0.0
+        
         # Apply mask and calculate MAE
-        masked_diff = np.abs(img1 - img2) * mask
-        return np.sum(masked_diff) / np.sum(mask)
+        masked_diff = np.abs(img1_2d - img2_2d) * mask_2d
+        return np.sum(masked_diff) / np.sum(mask_2d)
 
 def save_image(tensor, filename, nrow=4):
     """
