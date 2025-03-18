@@ -401,7 +401,7 @@ def validate(val_dataloader, model, epoch, writer, device):
                 sample_mae = calculate_mae(sample_sr, sample_hr, sample_mask)
                 
                 # Add custom title with metrics for this specific sample
-                title = f'Validation - Epoch {epoch+1}\nPSNR: {sample_psnr:.2f} dB, SSIM: {sample_ssim:.4f}, MAE: {sample_mae:.4f}'
+                title = f'Validation Results - Epoch {epoch+1}'
                 
                 # Visualize results (uses middle slice by default)
                 visualize_results(sample_lr, sample_sr, sample_hr, epoch+1, 0, save_path, custom_title=title)

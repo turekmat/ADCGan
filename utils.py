@@ -401,8 +401,8 @@ def visualize_results(lr_img, sr_img, hr_img, epoch, batch_idx=0, save_path=None
     sr_img = np.clip(sr_img, 0, 1)
     hr_img = np.clip(hr_img, 0, 1)
     
-    # Get number of samples to visualize
-    n_samples = min(lr_img.shape[0], 4)  # Show at most 4 samples
+    # Only visualize the first sample
+    n_samples = 1  # Now we always use just one sample
     
     # Create figure
     fig, axes = plt.subplots(n_samples, 3, figsize=(12, 4 * n_samples))
@@ -430,14 +430,6 @@ def visualize_results(lr_img, sr_img, hr_img, epoch, batch_idx=0, save_path=None
             sr_slice = sr_slice[middle_idx]
             hr_slice = hr_slice[middle_idx]
         
-        # Low-resolution image
-        axes[i, 0].imshow(lr_slice, cmap='gray')
-        axes[i, 0].set_title(f'Low-Resolution')
-        axes[i, 0].axis('off')
-        
-        # Super-resolution image
-        axes[i, 1].imshow(sr_slice, cmap='gray')
-        
         # Create mask from HR image
         mask = hr_slice > 0
         
@@ -446,12 +438,19 @@ def visualize_results(lr_img, sr_img, hr_img, epoch, batch_idx=0, save_path=None
         ssim_val = calculate_ssim(sr_slice, hr_slice, mask)
         mae_val = calculate_mae(sr_slice, hr_slice, mask)
         
-        axes[i, 1].set_title(f'Super-Resolution\nPSNR: {psnr_val:.2f}dB, SSIM: {ssim_val:.4f}, MAE: {mae_val:.4f}')
+        # Low-resolution image
+        axes[i, 0].imshow(lr_slice, cmap='gray')
+        axes[i, 0].set_title('Low-Resolution')
+        axes[i, 0].axis('off')
+        
+        # Super-resolution image
+        axes[i, 1].imshow(sr_slice, cmap='gray')
+        axes[i, 1].set_title(f'our SRGAN 4x SSIM {ssim_val:.4f}, MAE: {mae_val:.4f}')
         axes[i, 1].axis('off')
         
         # High-resolution image
         axes[i, 2].imshow(hr_slice, cmap='gray')
-        axes[i, 2].set_title(f'High-Resolution (Ground Truth)')
+        axes[i, 2].set_title('High-Resolution (Ground Truth)')
         axes[i, 2].axis('off')
     
     plt.tight_layout()
