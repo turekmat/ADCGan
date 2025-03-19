@@ -32,16 +32,35 @@ def train_val_split(file_list, val_split=0.1, seed=42):
     # Set random seed for reproducibility
     random.seed(seed)
     
-    # Shuffle the file list
-    shuffled_files = file_list.copy()
-    random.shuffle(shuffled_files)
+    # Create a copy of the file list
+    remaining_files = file_list.copy()
+    
+    # Always include 100610_ADC.nii in the validation set
+    target_file = None
+    for file_path in file_list:
+        if os.path.basename(file_path) == "100610_ADC.nii":
+            target_file = file_path
+            remaining_files.remove(file_path)
+            break
+    
+    # Shuffle the remaining files
+    random.shuffle(remaining_files)
     
     # Calculate the split index
-    val_size = max(1, int(len(shuffled_files) * val_split))
+    # If target file was found, we need one less validation file
+    val_size = max(1, int(len(file_list) * val_split))
+    if target_file:
+        val_size = max(1, val_size - 1)  # Reduce by 1 since we already have target file
     
-    # Split the files
-    val_files = shuffled_files[:val_size]
-    train_files = shuffled_files[val_size:]
+    # Split the remaining files
+    additional_val_files = remaining_files[:val_size]
+    train_files = remaining_files[val_size:]
+    
+    # Create final validation set with target file (if found)
+    val_files = additional_val_files
+    if target_file:
+        val_files = [target_file] + additional_val_files
+        print(f"Added 100610_ADC.nii to validation set")
     
     return train_files, val_files
 
@@ -350,6 +369,10 @@ def validate(val_dataloader, model, epoch, writer, device):
     # Flag to track if we've saved a visualization for this epoch
     vis_saved = False
     
+    # For specific file visualization (100610_ADC.nii)
+    target_file_data = None
+    target_file_found = False
+    
     with torch.no_grad():
         pbar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
         for i, (lr_imgs, hr_imgs) in pbar:
@@ -377,7 +400,21 @@ def validate(val_dataloader, model, epoch, writer, device):
             ssim_metrics.update(ssim, lr_imgs.size(0))
             mae_metrics.update(mae, lr_imgs.size(0))
             
-            # Save visualizations of middle slice for the first batch if not already saved
+            # Check for our target file (100610_ADC.nii) in this batch
+            # Since we don't have direct file name info here, we'll check if it's the first batch
+            # since we ensured 100610_ADC.nii is always in the validation set and likely first
+            if i == 0 and not target_file_found:
+                # Store for target file data
+                target_file_data = {
+                    'lr': lr_imgs[0:1].detach().clone(), 
+                    'sr': sr_imgs[0:1].detach().clone(), 
+                    'hr': hr_imgs[0:1].detach().clone(),
+                    'mask': mask[0:1].clone() if mask.dim() > 2 else mask.clone()
+                }
+                target_file_found = True
+                print("Stored data for 100610_ADC.nii visualization")
+            
+            # Save standard visualizations for the first batch if not already saved
             if i == 0 and not vis_saved:
                 # Use the first sample from the batch
                 sample_idx = 0
@@ -428,6 +465,25 @@ def validate(val_dataloader, model, epoch, writer, device):
                 f"SSIM: {ssim_metrics.avg:.4f} "
                 f"MAE: {mae_metrics.avg:.4f}"
             )
+    
+    # After validation loop, create and save PDF visualization for target file
+    if target_file_found and target_file_data:
+        # Create directory for PDF visualizations
+        pdf_dir = os.path.join(DIRS['results'], 'pdf_visualizations')
+        os.makedirs(pdf_dir, exist_ok=True)
+        
+        # Save PDF visualization
+        pdf_path = os.path.join(pdf_dir, f'100610_ADC_epoch_{epoch+1}.pdf')
+        
+        # Use visualize_results with PDF path to generate PDF format
+        visualize_results(
+            target_file_data['lr'], 
+            target_file_data['sr'], 
+            target_file_data['hr'], 
+            epoch+1, 
+            0, 
+            pdf_path
+        )
     
     print(f"Validation Results - Epoch: {epoch + 1} "
           f"PSNR: {psnr_metrics.avg:.2f} "

@@ -404,61 +404,62 @@ def visualize_results(lr_img, sr_img, hr_img, epoch, batch_idx=0, save_path=None
     # Only visualize the first sample
     n_samples = 1  # Now we always use just one sample
     
+    # Prepare for PDF output (if save_path ends with .pdf)
+    is_pdf = save_path and save_path.endswith('.pdf')
+    if is_pdf:
+        from matplotlib.backends.backend_pdf import PdfPages
+    
     # Create figure
-    fig, axes = plt.subplots(n_samples, 3, figsize=(12, 4 * n_samples))
-    if n_samples == 1:
-        axes = axes.reshape(1, -1)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     
-    # Add custom title if provided
-    if custom_title:
-        fig.suptitle(custom_title, fontsize=16)
-        plt.subplots_adjust(top=0.9)
+    # Extract the middle slice for 3D volumes or use the entire 2D image
+    lr_slice = lr_img[0, 0]
+    sr_slice = sr_img[0, 0]
+    hr_slice = hr_img[0, 0]
     
-    for i in range(n_samples):
-        # Extract the middle slice for 3D volumes or use the entire 2D image
-        # For 3D volumes with multiple slices, the shape would be [B, C, D, H, W]
-        # We want to get middle slice along D dimension
-        
-        lr_slice = lr_img[i, 0]
-        sr_slice = sr_img[i, 0]
-        hr_slice = hr_img[i, 0]
-        
-        # If the images are 3D (with multiple slices)
-        if len(lr_slice.shape) > 2:  # If slices dimension exists
-            middle_idx = lr_slice.shape[0] // 2  # Get middle slice index
-            lr_slice = lr_slice[middle_idx]
-            sr_slice = sr_slice[middle_idx]
-            hr_slice = hr_slice[middle_idx]
-        
-        # Create mask from HR image
-        mask = hr_slice > 0
-        
-        # Calculate metrics in masked region
-        psnr_val = calculate_psnr(sr_slice, hr_slice, mask)
-        ssim_val = calculate_ssim(sr_slice, hr_slice, mask)
-        mae_val = calculate_mae(sr_slice, hr_slice, mask)
-        
-        # Low-resolution image
-        axes[i, 0].imshow(lr_slice, cmap='gray')
-        axes[i, 0].set_title('Low-Resolution')
-        axes[i, 0].axis('off')
-        
-        # Super-resolution image
-        axes[i, 1].imshow(sr_slice, cmap='gray')
-        axes[i, 1].set_title(f'our SRGAN 4x SSIM {ssim_val:.4f}, MAE: {mae_val:.4f}')
-        axes[i, 1].axis('off')
-        
-        # High-resolution image
-        axes[i, 2].imshow(hr_slice, cmap='gray')
-        axes[i, 2].set_title('High-Resolution (Ground Truth)')
-        axes[i, 2].axis('off')
+    # If the images are 3D (with multiple slices)
+    if len(lr_slice.shape) > 2:  # If slices dimension exists
+        middle_idx = lr_slice.shape[0] // 2  # Get middle slice index
+        lr_slice = lr_slice[middle_idx]
+        sr_slice = sr_slice[middle_idx]
+        hr_slice = hr_slice[middle_idx]
+    
+    # Create mask from HR image
+    mask = hr_slice > 0
+    
+    # Calculate metrics in masked region
+    ssim_val = calculate_ssim(sr_slice, hr_slice, mask)
+    mae_val = calculate_mae(sr_slice, hr_slice, mask)
+    
+    # Low-resolution image
+    axes[0].imshow(lr_slice, cmap='gray')
+    axes[0].set_title("Low-Resolution")
+    axes[0].axis("off")
+    
+    # Super-resolution image
+    axes[1].imshow(sr_slice, cmap='gray')
+    axes[1].set_title(f"Our SRGAN 4x\nSSIM: {ssim_val:.4f}\nMAE: {mae_val:.4f}")
+    axes[1].axis("off")
+    
+    # High-resolution image
+    axes[2].imshow(hr_slice, cmap='gray')
+    axes[2].set_title("High-Resolution\n(Ground Truth)")
+    axes[2].axis("off")
     
     plt.tight_layout()
     
     # Save figure if path is provided
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path)
+        
+        # If PDF format is requested
+        if is_pdf:
+            with PdfPages(save_path) as pdf:
+                pdf.savefig(fig)
+            print(f"PDF comparison saved to: {save_path}")
+        else:
+            plt.savefig(save_path)
+        
         plt.close()
     else:
         plt.show()
