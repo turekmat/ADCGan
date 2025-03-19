@@ -370,8 +370,18 @@ def validate(val_dataloader, model, epoch, writer, device):
     vis_saved = False
     
     # For specific file visualization (100610_ADC.nii)
-    target_file_data = None
     target_file_found = False
+    
+    # Get the files being processed in the validation set
+    val_files = val_dataloader.dataset.file_list
+    target_file_idx = None
+    
+    # Find 100610_ADC.nii in the validation set
+    for idx, file_path in enumerate(val_files):
+        if os.path.basename(file_path) == "100610_ADC.nii":
+            target_file_idx = idx
+            print(f"Found 100610_ADC.nii at index {idx} in validation set")
+            break
     
     with torch.no_grad():
         pbar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
@@ -399,20 +409,6 @@ def validate(val_dataloader, model, epoch, writer, device):
             psnr_metrics.update(psnr, lr_imgs.size(0))
             ssim_metrics.update(ssim, lr_imgs.size(0))
             mae_metrics.update(mae, lr_imgs.size(0))
-            
-            # Check for our target file (100610_ADC.nii) in this batch
-            # Since we don't have direct file name info here, we'll check if it's the first batch
-            # since we ensured 100610_ADC.nii is always in the validation set and likely first
-            if i == 0 and not target_file_found:
-                # Store for target file data
-                target_file_data = {
-                    'lr': lr_imgs[0:1].detach().clone(), 
-                    'sr': sr_imgs[0:1].detach().clone(), 
-                    'hr': hr_imgs[0:1].detach().clone(),
-                    'mask': mask[0:1].clone() if mask.dim() > 2 else mask.clone()
-                }
-                target_file_found = True
-                print("Stored data for 100610_ADC.nii visualization")
             
             # Save standard visualizations for the first batch if not already saved
             if i == 0 and not vis_saved:
@@ -466,24 +462,51 @@ def validate(val_dataloader, model, epoch, writer, device):
                 f"MAE: {mae_metrics.avg:.4f}"
             )
     
-    # After validation loop, create and save PDF visualization for target file
-    if target_file_found and target_file_data:
-        # Create directory for PDF visualizations
-        pdf_dir = os.path.join(DIRS['results'], 'pdf_visualizations')
-        os.makedirs(pdf_dir, exist_ok=True)
+    # After validation loop, create and save PDF visualization specifically for 100610_ADC.nii
+    # We'll load the file directly to ensure we're getting the exact middle slice
+    if target_file_idx is not None:
+        print(f"Creating PDF visualization for 100610_ADC.nii")
+        target_file = val_files[target_file_idx]
         
-        # Save PDF visualization
-        pdf_path = os.path.join(pdf_dir, f'100610_ADC_epoch_{epoch+1}.pdf')
-        
-        # Use visualize_results with PDF path to generate PDF format
-        visualize_results(
-            target_file_data['lr'], 
-            target_file_data['sr'], 
-            target_file_data['hr'], 
-            epoch+1, 
-            0, 
-            pdf_path
-        )
+        # Explicitly load 100610_ADC.nii file using the dataset's loading methods
+        try:
+            # Get target file data directly from the dataset
+            target_data = val_dataloader.dataset.get_specific_file(target_file)
+            if target_data:
+                lr_tensor, hr_tensor = target_data
+                
+                # Get middle slice exactly like in the user's example
+                # First, ensure the tensors are in the right format
+                if isinstance(lr_tensor, torch.Tensor):
+                    lr_tensor = lr_tensor.unsqueeze(0).to(device)  # Add batch dimension
+                if isinstance(hr_tensor, torch.Tensor):
+                    hr_tensor = hr_tensor.unsqueeze(0).to(device)  # Add batch dimension
+                
+                # Generate SR image
+                with torch.no_grad():
+                    sr_tensor = model.generator(lr_tensor)
+                
+                # Create directory for PDF visualizations
+                pdf_dir = os.path.join(DIRS['results'], 'pdf_visualizations')
+                os.makedirs(pdf_dir, exist_ok=True)
+                
+                # Save PDF visualization
+                pdf_path = os.path.join(pdf_dir, f'100610_ADC_epoch_{epoch+1}.pdf')
+                
+                # Use visualize_results with PDF path
+                visualize_results(
+                    lr_tensor.cpu(),
+                    sr_tensor.cpu(),
+                    hr_tensor.cpu(),
+                    epoch+1,
+                    0,
+                    pdf_path
+                )
+                print(f"Created PDF visualization for 100610_ADC.nii at {pdf_path}")
+            else:
+                print(f"Could not get data for 100610_ADC.nii from dataset")
+        except Exception as e:
+            print(f"Error creating PDF for 100610_ADC.nii: {str(e)}")
     
     print(f"Validation Results - Epoch: {epoch + 1} "
           f"PSNR: {psnr_metrics.avg:.2f} "

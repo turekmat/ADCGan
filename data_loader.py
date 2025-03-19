@@ -184,6 +184,78 @@ class MedicalImageDataset(Dataset):
         
         return lr_image, hr_image
 
+    def get_specific_file(self, file_path):
+        """
+        Load a specific file and return its middle slice as (LR, HR) pair.
+        This follows the same approach as in the user's example code.
+        
+        Args:
+            file_path (str): Path to the specific file
+            
+        Returns:
+            tuple: (lr_image, hr_image) tensors of the middle slice
+        """
+        try:
+            print(f"Loading specific file: {file_path}")
+            
+            # Load the 3D volume exactly as in user's example code
+            if file_path.endswith('.nii'):
+                # Load NIfTI file
+                nifti_img = nib.load(file_path)
+                volume = nifti_img.get_fdata()
+            else:  # '.mha'
+                # Load MHA file
+                itk_img = sitk.ReadImage(file_path)
+                volume = sitk.GetArrayFromImage(itk_img)
+                # Convert from [slices, height, width] to [height, width, slices]
+                volume = np.transpose(volume, (1, 2, 0))
+            
+            # Get dimensions
+            if volume.ndim == 3:
+                # Extract middle slice - exactly as in the example code
+                Z, H, W = volume.shape
+                mid_index = Z // 2
+                mid_slice = volume[:, :, mid_index]
+                
+                # Normalize the slice to [0, 1] - similar to example code
+                slice_min = mid_slice.min()
+                slice_max = mid_slice.max()
+                if slice_max - slice_min > 0:
+                    hr_slice = (mid_slice - slice_min) / (slice_max - slice_min)
+                else:
+                    hr_slice = mid_slice
+                
+                # Convert to tensor with channel dimension [1, H, W]
+                hr_image = torch.from_numpy(hr_slice).float().unsqueeze(0)
+                
+                # Resize if needed to match the configured high-resolution size
+                current_h, current_w = hr_image.shape[1], hr_image.shape[2]
+                if current_h != DATA['hr_size'] or current_w != DATA['hr_size']:
+                    hr_image = F.interpolate(
+                        hr_image.unsqueeze(0),
+                        size=(DATA['hr_size'], DATA['hr_size']),
+                        mode='bicubic',
+                        align_corners=False
+                    ).squeeze(0)
+                
+                # Create low-resolution image through downsampling
+                lr_image = F.interpolate(
+                    hr_image.unsqueeze(0),
+                    scale_factor=1/DATA['scale_factor'],
+                    mode='bicubic',
+                    align_corners=False
+                ).squeeze(0)
+                
+                print(f"Successfully loaded middle slice (index {mid_index}) from {file_path}")
+                return lr_image, hr_image
+            else:
+                print(f"Volume has unexpected dimensions: {volume.shape}")
+                return None
+                
+        except Exception as e:
+            print(f"Error loading specific file {file_path}: {str(e)}")
+            return None
+
 
 def get_dataloader(data_dir, batch_size, is_train=True, file_extension='.nii', num_workers=4):
     """

@@ -401,15 +401,12 @@ def visualize_results(lr_img, sr_img, hr_img, epoch, batch_idx=0, save_path=None
     sr_img = np.clip(sr_img, 0, 1)
     hr_img = np.clip(hr_img, 0, 1)
     
-    # Only visualize the first sample
-    n_samples = 1  # Now we always use just one sample
-    
-    # Prepare for PDF output (if save_path ends with .pdf)
+    # Determine if this is for PDF output
     is_pdf = save_path and save_path.endswith('.pdf')
     if is_pdf:
         from matplotlib.backends.backend_pdf import PdfPages
     
-    # Create figure
+    # Create figure with standard dimensions
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     
     # Extract the middle slice for 3D volumes or use the entire 2D image
