@@ -105,7 +105,8 @@ def train(args):
             batch_size=args.batch_size,
             is_train=True,
             file_extension=args.file_extension,
-            num_workers=args.num_workers
+            num_workers=args.num_workers,
+            data_range=args.data_range
         )
         
         val_dataloader = get_dataloader(
@@ -113,7 +114,8 @@ def train(args):
             batch_size=args.batch_size,
             is_train=False,
             file_extension=args.file_extension,
-            num_workers=args.num_workers
+            num_workers=args.num_workers,
+            data_range=args.data_range
         )
     else:
         # If no validation directory, split the main directory
@@ -136,14 +138,16 @@ def train(args):
             data_dir=None,  # Not used when file_list is provided
             is_train=True,
             file_extension=args.file_extension,
-            file_list=train_files
+            file_list=train_files,
+            data_range=args.data_range
         )
         
         val_dataset = MedicalImageDataset(
             data_dir=None,  # Not used when file_list is provided
             is_train=False,
             file_extension=args.file_extension,
-            file_list=val_files
+            file_list=val_files,
+            data_range=args.data_range
         )
         
         # Create dataloaders
@@ -537,6 +541,8 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--scale-factor', type=int, default=DATA['scale_factor'], choices=[2, 4], 
                       help='Super-resolution scaling factor (2x or 4x)')
+    parser.add_argument('--data-range', type=str, default='adc', choices=['adc', 'zadc'],
+                      help='Data range type: adc (0-1) or zadc (-10 to 10)')
     
     args = parser.parse_args()
     

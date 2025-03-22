@@ -162,14 +162,22 @@ def run_inference(args):
         # Convert to tensor
         lr_tensor = torch.from_numpy(lr_slice).float().unsqueeze(0).unsqueeze(0).to(device)
         
-        # Normalize to [0, 1] if needed
+        # Normalize based on data range type
         normalized = False
         lr_min = 0
         lr_max = 1
 
-        if lr_tensor.min() < 0 or lr_tensor.max() > 1:
-            lr_min = lr_tensor.min()
-            lr_max = lr_tensor.max()
+        if args.data_range == 'adc':
+            # Standardní normalizace pro ADC data
+            if lr_tensor.min() < 0 or lr_tensor.max() > 1:
+                lr_min = lr_tensor.min()
+                lr_max = lr_tensor.max()
+                lr_tensor = (lr_tensor - lr_min) / (lr_max - lr_min)
+                normalized = True
+        elif args.data_range == 'zadc':
+            # Normalizace pro ZADC data (rozsah -10 až 10)
+            lr_min = -10
+            lr_max = 10
             lr_tensor = (lr_tensor - lr_min) / (lr_max - lr_min)
             normalized = True
         
@@ -287,6 +295,8 @@ if __name__ == "__main__":
     parser.add_argument('--no-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('--scale-factor', type=int, default=DATA['scale_factor'], choices=[2, 4], 
                       help='Super-resolution scaling factor (2x or 4x)')
+    parser.add_argument('--data-range', type=str, default='adc', choices=['adc', 'zadc'],
+                      help='Data range type: adc (0-1) or zadc (-10 to 10)')
     
     args = parser.parse_args()
     

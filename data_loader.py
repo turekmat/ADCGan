@@ -21,7 +21,7 @@ class MedicalImageDataset(Dataset):
     Loads 3D NIfTI (.nii) or MHA files and extracts 2D slices.
     """
     
-    def __init__(self, data_dir=None, is_train=True, file_extension='.nii', file_list=None):
+    def __init__(self, data_dir=None, is_train=True, file_extension='.nii', file_list=None, data_range='adc'):
         """
         Initialize the dataset.
         
@@ -32,9 +32,11 @@ class MedicalImageDataset(Dataset):
             file_extension (str): File extension of the medical images ('.nii' or '.mha')
             file_list (list, optional): List of specific file paths to use.
                                        If provided, data_dir is ignored.
+            data_range (str): Type of data range: 'adc' (0-1) or 'zadc' (-10 to 10)
         """
         self.is_train = is_train
         self.file_extension = file_extension
+        self.data_range = data_range
         
         # Get the file list either from data_dir or directly from file_list parameter
         if file_list is not None:
@@ -102,9 +104,14 @@ class MedicalImageDataset(Dataset):
         nifti_img = nib.load(file_path)
         volume = nifti_img.get_fdata()
         
-        # Assuming data is already normalized to [0, 1]
-        # If not, uncomment the following line
-        # volume = (volume - volume.min()) / (volume.max() - volume.min())
+        # Normalizace podle typu dat
+        if self.data_range == 'adc':
+            # Standardní normalizace pro ADC data (předpokládá rozsah 0-1 nebo vlastní min-max)
+            if volume.min() < 0 or volume.max() > 1:
+                volume = (volume - volume.min()) / (volume.max() - volume.min())
+        elif self.data_range == 'zadc':
+            # Normalizace pro ZADC data (rozsah -10 až 10)
+            volume = (volume - (-10)) / (10 - (-10))
         
         return volume
     
@@ -124,9 +131,14 @@ class MedicalImageDataset(Dataset):
         # Convert from [slices, height, width] to [height, width, slices]
         volume = np.transpose(volume, (1, 2, 0))
         
-        # Assuming data is already normalized to [0, 1]
-        # If not, uncomment the following line
-        # volume = (volume - volume.min()) / (volume.max() - volume.min())
+        # Normalizace podle typu dat
+        if self.data_range == 'adc':
+            # Standardní normalizace pro ADC data (předpokládá rozsah 0-1 nebo vlastní min-max)
+            if volume.min() < 0 or volume.max() > 1:
+                volume = (volume - volume.min()) / (volume.max() - volume.min())
+        elif self.data_range == 'zadc':
+            # Normalizace pro ZADC data (rozsah -10 až 10)
+            volume = (volume - (-10)) / (10 - (-10))
         
         return volume
     
@@ -217,13 +229,18 @@ class MedicalImageDataset(Dataset):
                 mid_index = Z // 2
                 mid_slice = volume[:, :, mid_index]
                 
-                # Normalize the slice to [0, 1] - similar to example code
-                slice_min = mid_slice.min()
-                slice_max = mid_slice.max()
-                if slice_max - slice_min > 0:
-                    hr_slice = (mid_slice - slice_min) / (slice_max - slice_min)
-                else:
-                    hr_slice = mid_slice
+                # Normalizace podle typu dat
+                if self.data_range == 'adc':
+                    # Standardní normalizace pro ADC data
+                    slice_min = mid_slice.min()
+                    slice_max = mid_slice.max()
+                    if slice_max - slice_min > 0:
+                        hr_slice = (mid_slice - slice_min) / (slice_max - slice_min)
+                    else:
+                        hr_slice = mid_slice
+                elif self.data_range == 'zadc':
+                    # Normalizace pro ZADC data (rozsah -10 až 10)
+                    hr_slice = (mid_slice - (-10)) / (10 - (-10))
                 
                 # Convert to tensor with channel dimension [1, H, W]
                 hr_image = torch.from_numpy(hr_slice).float().unsqueeze(0)
@@ -257,29 +274,37 @@ class MedicalImageDataset(Dataset):
             return None
 
 
-def get_dataloader(data_dir, batch_size, is_train=True, file_extension='.nii', num_workers=4):
+def get_dataloader(data_dir, batch_size, is_train=True, file_extension='.nii', num_workers=4, data_range='adc'):
     """
-    Create a DataLoader for medical images.
+    Get a DataLoader for the SRGAN model.
     
     Args:
         data_dir (str): Directory containing the medical image files
         batch_size (int): Batch size
         is_train (bool): Whether this is for training or validation
         file_extension (str): File extension of the medical images ('.nii' or '.mha')
-        num_workers (int): Number of worker threads for loading data
+        num_workers (int): Number of worker processes for data loading
+        data_range (str): Type of data range: 'adc' (0-1) or 'zadc' (-10 to 10)
         
     Returns:
-        torch.utils.data.DataLoader: DataLoader for the dataset
+        torch.utils.data.DataLoader: DataLoader for the specified directory
     """
-    dataset = MedicalImageDataset(data_dir, is_train, file_extension)
+    dataset = MedicalImageDataset(
+        data_dir=data_dir,
+        is_train=is_train,
+        file_extension=file_extension,
+        data_range=data_range
+    )
     
-    return DataLoader(
+    dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=is_train,
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=True
     )
+    
+    return dataloader
 
 
 # For testing
